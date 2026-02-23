@@ -397,8 +397,8 @@ RCT_EXPORT_METHOD(sync:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectB
 {
     [locationManager sync:^(NSArray* records) {
         resolve(records);
-    } failure:^(NSError* error) {
-        reject(@"sync_error", error.localizedDescription, error);
+    } failure:^(NSString* error) {
+        reject(@"sync_error", error, nil);
     }];
 }
 
