@@ -397,8 +397,13 @@ RCT_EXPORT_METHOD(sync:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectB
 {
     [locationManager sync:^(NSArray* records) {
         resolve(records);
-    } failure:^(NSString* error) {
-        reject(@"sync_error", error, nil);
+    } failure:^(NSError* error) {
+        // Pass nil for the NSError argument — TSLocationManager can produce NSError objects
+        // whose userInfo contains NSString values where React Native expects NSError objects
+        // (e.g. under NSUnderlyingErrorKey). RCTJSErrorFromCodeMessageAndNSError then calls
+        // .code on the NSString => NSInvalidArgumentException crash. Passing nil is safe;
+        // the human-readable message is already in error.localizedDescription.
+        reject(@"sync_error", error.localizedDescription, nil);
     }];
 }
 
