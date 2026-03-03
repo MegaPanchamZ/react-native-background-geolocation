@@ -30,5 +30,15 @@ declare module "react-native-background-geolocation" {
 	  * when [[success]] is `true`, this is the decoded JSON response returned from [[Authorization.refreshUrl]].  Otherwise, `null`.
 	  */
 	  response:any;
+	  /**
+	  * Optional raw response text when available from platform bridge.
+	  */
+	  responseText?: string;
+	  /**
+	  * Optional alternate raw payload fields from platform bridge implementations.
+	  */
+	  rawResponse?: string;
+	  body?: string;
+	  payload?: string;
 	}
 }

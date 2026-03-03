@@ -333,49 +333,53 @@ RCT_EXPORT_METHOD(finishHeadlessTask:(double)taskId
 
 RCT_EXPORT_METHOD(getCurrentPosition:(NSDictionary*)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 {
-    TSCurrentPositionRequest *request = [TSCurrentPositionRequest requestWithSuccess:^(TSLocationEvent *event) {
-        resolve([event toDictionary]);
-    } failure:^(NSError *error) {
-        reject(@"get_current_position_error", error.localizedDescription, error);
-    }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        TSCurrentPositionRequest *request = [TSCurrentPositionRequest requestWithSuccess:^(TSLocationEvent *event) {
+            resolve([event toDictionary]);
+        } failure:^(NSError *error) {
+            reject(@"get_current_position_error", error.localizedDescription, error);
+        }];
 
-    if (options[@"timeout"]) {
-        request.timeout = [options[@"timeout"] doubleValue];
-    }
-    if (options[@"maximumAge"]) {
-        request.maximumAge = [options[@"maximumAge"] doubleValue];
-    }
-    if (options[@"persist"]) {
-        request.persist = [options[@"persist"] boolValue];
-    }
-    if (options[@"samples"]) {
-        request.samples = [options[@"samples"] intValue];
-    }
-    if (options[@"desiredAccuracy"]) {
-        request.desiredAccuracy = [options[@"desiredAccuracy"] doubleValue];
-    }
-    if (options[@"extras"]) {
-        request.extras = options[@"extras"];
-    }
-    [locationManager getCurrentPosition:request];
+        if (options[@"timeout"]) {
+            request.timeout = [options[@"timeout"] doubleValue];
+        }
+        if (options[@"maximumAge"]) {
+            request.maximumAge = [options[@"maximumAge"] doubleValue];
+        }
+        if (options[@"persist"]) {
+            request.persist = [options[@"persist"] boolValue];
+        }
+        if (options[@"samples"]) {
+            request.samples = [options[@"samples"] intValue];
+        }
+        if (options[@"desiredAccuracy"]) {
+            request.desiredAccuracy = [options[@"desiredAccuracy"] doubleValue];
+        }
+        if (options[@"extras"]) {
+            request.extras = options[@"extras"];
+        }
+        [locationManager getCurrentPosition:request];
+    });
 }
 
 RCT_EXPORT_METHOD(watchPosition:(NSDictionary*)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 {
-    TSWatchPositionRequest *request = [TSWatchPositionRequest requestWithSuccess:^(TSLocationStreamEvent *event) {
-        [self sendEvent:EVENT_WATCHPOSITION body:[event.locationEvent toDictionary]];
-    } failure:^(NSError *error) {
-        // No reject; stream API
-    }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        TSWatchPositionRequest *request = [TSWatchPositionRequest requestWithSuccess:^(TSLocationStreamEvent *event) {
+            [self sendEvent:EVENT_WATCHPOSITION body:[event.locationEvent toDictionary]];
+        } failure:^(NSError *error) {
+            // No reject; stream API
+        }];
 
-    if (options[@"interval"])           { request.interval = [options[@"interval"] doubleValue]; }
-    if (options[@"desiredAccuracy"])    { request.desiredAccuracy = [options[@"desiredAccuracy"] doubleValue]; }
-    if (options[@"persist"])            { request.persist = [options[@"persist"] boolValue]; }
-    if (options[@"extras"])             { request.extras = options[@"extras"]; }
-    if (options[@"timeout"])            { request.timeout = [options[@"timeout"] doubleValue]; }
+        if (options[@"interval"])           { request.interval = [options[@"interval"] doubleValue]; }
+        if (options[@"desiredAccuracy"])    { request.desiredAccuracy = [options[@"desiredAccuracy"] doubleValue]; }
+        if (options[@"persist"])            { request.persist = [options[@"persist"] boolValue]; }
+        if (options[@"extras"])             { request.extras = options[@"extras"] ; }
+        if (options[@"timeout"])            { request.timeout = [options[@"timeout"] doubleValue]; }
 
-    NSInteger watchId = [locationManager watchPosition:request];
-    resolve(@(watchId));
+        NSInteger watchId = [locationManager watchPosition:request];
+        resolve(@(watchId));
+    });
 }
 
 RCT_EXPORT_METHOD(stopWatchPosition:(NSInteger)watchId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
@@ -398,7 +402,12 @@ RCT_EXPORT_METHOD(sync:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectB
     [locationManager sync:^(NSArray* records) {
         resolve(records);
     } failure:^(NSError* error) {
-        reject(@"sync_error", error.localizedDescription, error);
+        // Pass nil for the NSError argument — TSLocationManager can produce NSError objects
+        // whose userInfo contains NSString values where React Native expects NSError objects
+        // (e.g. under NSUnderlyingErrorKey). RCTJSErrorFromCodeMessageAndNSError then calls
+        // .code on the NSString => NSInvalidArgumentException crash. Passing nil is safe;
+        // the human-readable message is already in error.localizedDescription.
+        reject(@"sync_error", error.localizedDescription, nil);
     }];
 }
 
@@ -654,11 +663,13 @@ RCT_EXPORT_METHOD(getProviderState:(RCTPromiseResolveBlock)resolve reject:(RCTPr
 
 RCT_EXPORT_METHOD(requestPermission:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 {
-    [locationManager requestPermission:^(NSNumber *status) {
-        resolve(status);
-    } failure:^(NSNumber *status) {
-        reject(@"request_permission_error", [status stringValue], nil);
-    }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [locationManager requestPermission:^(NSNumber *status) {
+            resolve(status);
+        } failure:^(NSNumber *status) {
+            reject(@"request_permission_error", [status stringValue], nil);
+        }];
+    });
 }
 
 RCT_EXPORT_METHOD(requestTemporaryFullAccuracy:(NSString*)purpose resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)

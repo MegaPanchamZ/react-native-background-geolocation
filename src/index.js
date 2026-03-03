@@ -80,6 +80,101 @@ const ACCURACY_AUTHORIZATION_REDUCED      = AccuracyAuthorization.Reduced;
 
 const emptyFn = function() {}
 
+const safeJsonParse = (value) => {
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    return null;
+  }
+};
+
+const looksLikeObjectWithKeys = (value) => {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
+};
+
+const hasTokenLikeFields = (value) => {
+  if (!looksLikeObjectWithKeys(value)) return false;
+
+  const stack = [value];
+  const visited = new Set();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!looksLikeObjectWithKeys(current) || visited.has(current)) continue;
+    visited.add(current);
+
+    const keys = Object.keys(current);
+    const hasAccess = keys.includes('access_token') || keys.includes('accessToken') || keys.includes('id_token');
+    const hasRefresh = keys.includes('refresh_token') || keys.includes('refreshToken');
+    const hasExpiry =
+      keys.includes('expires_in') ||
+      keys.includes('expiresIn') ||
+      keys.includes('expiry') ||
+      keys.includes('expires_at') ||
+      keys.includes('expiresAt');
+
+    if (hasAccess && (hasRefresh || hasExpiry)) {
+      return true;
+    }
+
+    keys.forEach((key) => {
+      const next = current[key];
+      if (looksLikeObjectWithKeys(next)) {
+        stack.push(next);
+      }
+    });
+  }
+
+  return false;
+};
+
+const normalizeAuthorizationEvent = (event) => {
+  if (!event || typeof event !== 'object') return event;
+
+  const normalized = { ...event };
+  const statusCode = Number(normalized.status || 0);
+
+  let response = normalized.response;
+
+  // Some native payloads may deliver response as a JSON string.
+  if (typeof response === 'string') {
+    const parsed = safeJsonParse(response);
+    if (parsed) response = parsed;
+  }
+
+  // Fallback: if response is empty, attempt parse from alternate raw fields.
+  if (!looksLikeObjectWithKeys(response)) {
+    const rawCandidates = [
+      normalized.responseText,
+      normalized.rawResponse,
+      normalized.body,
+      normalized.payload,
+    ];
+
+    for (let i = 0; i < rawCandidates.length; i++) {
+      const parsed = safeJsonParse(rawCandidates[i]);
+      if (looksLikeObjectWithKeys(parsed)) {
+        response = parsed;
+        break;
+      }
+    }
+  }
+
+  if (response !== undefined) {
+    normalized.response = response;
+  }
+
+  // Defensive recovery: when server returned 2xx and we can see token-like
+  // payload fields, promote event to success for consumer synchronization.
+  if (!normalized.success && statusCode >= 200 && statusCode < 300 && hasTokenLikeFields(response)) {
+    normalized.success = true;
+    normalized.error = null;
+  }
+
+  return normalized;
+};
+
 export default class BackgroundGeolocation {
   static get EVENT_BOOT()                  { return Event.Boot; }
   static get EVENT_TERMINATE()             { return Event.Terminate; }
@@ -304,7 +399,9 @@ export default class BackgroundGeolocation {
   }
 
   static onAuthorization(callback) {
-    return this.addListener(Event.Authorization, callback);
+    return this.addListener(Event.Authorization, (event) => {
+      callback(normalizeAuthorizationEvent(event));
+    });
   }
 
   /**
